@@ -1,11 +1,13 @@
-import { UserSchemma } from "../models/user.model.js";
 import { createHash, isValidPassword, generateToken } from "../utils.js";
-import passport from "passport";
+import UserService from "../services/user.services.js";
+
+const userService = new UserService();
 
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await UserSchemma.findOne({ email }).lean();
+    //const user = await UserSchemma.findOne({ email }).lean();
+    const user = await userService.login(req.body);
     if (isValidPassword(user, password)) {
       const token = generateToken({
         email: user.email,
@@ -31,20 +33,10 @@ export const login = async (req, res) => {
   }
 };
 
-export const register = [
-  passport.authenticate("register", {
-    failureRedirect: "/failRegister",
-    session: false,
-    successRedirect: "/login",
-  }),
-  async (req, res) => {
-    res.status(201).json({
-      message: "User created",
-    });
-  },
-];
+export const register = (req, res) => userService.register(req, res);
+export const profile = (req, res) => userService.profile(req, res);
 
-export const profile = (req, res) => {
+/* export const profile = (req, res) => {
   passport.authenticate("jwt", { session: false }),
     handleAuth("admin"),
     (req, res) => {
@@ -59,4 +51,4 @@ export const profile = (req, res) => {
         },
       });
     };
-};
+}; */

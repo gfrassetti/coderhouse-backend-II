@@ -1,5 +1,4 @@
 import express from "express";
-import mongoose from "mongoose";
 import passport from "passport";
 import dotenv from "dotenv";
 import { engine } from "express-handlebars";
@@ -7,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { initPassport, jwtPassport } from "./config/passport.js";
 import router from "./routes/index.js";
-import cookieParser from "cookie-parser";
+import { connectionDB } from './db/connection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,20 +29,9 @@ app.use(express.static(path.join(__dirname, "public")));
 
 initPassport();
 jwtPassport();
+connectionDB();
 
 app.use("/", router);
-
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log("Connected to MongoDB");
-  })
-  .catch((error) => {
-    console.error("Error connecting to MongoDB:", error);
-  });
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {

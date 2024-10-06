@@ -1,6 +1,8 @@
 import { Router } from "express";
 import passport from "passport";
 
+//en construccion
+
 const ViewsRouter = Router();
 
 ViewsRouter.get("/", (req, res) => {

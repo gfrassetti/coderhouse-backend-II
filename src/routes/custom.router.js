@@ -64,7 +64,7 @@ export default class CustomRouter {
         return res
           .status(401)
           .json({ status: "error", message: "Invalid token" });
-      if (policies.includes(payload.role.toUppercase()))
+      if (policies.includes(payload.role.toUpperCase()))
         return res
           .status(403)
           .json({ status: "error", message: "Not authorized" });

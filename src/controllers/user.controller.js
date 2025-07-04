@@ -1,33 +1,27 @@
-import { createHash, isValidPassword, generateToken } from "../utils.js";
 import UserService from "../services/user.services.js";
 
 const userService = new UserService();
 
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    //const user = await UserSchemma.findOne({ email }).lean();
     const user = await userService.login(req.body);
-    if (isValidPassword(user, password)) {
-      const token = generateToken({
-        email: user.email,
-        name: user.first_name,
-        role: user.role,
-      });
-      return res
-        .status(200)
-        .cookie("currentUser", token, {
-          httpOnly: true,
-          maxAge: 60000,
-          signed: true,
-        })
-        .json({
-          message: "Login successful",
-          user: user.first_name,
-          token,
-        });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid credentials" });
     }
-    return res.status(400).json({ message: "Invalid credentials" });
+
+    const token = userService.generateLoginToken(user);
+    return res
+      .status(200)
+      .cookie("currentUser", token, {
+        httpOnly: true,
+        maxAge: 60000,
+        signed: true,
+      })
+      .json({
+        message: "Login successful",
+        user: user.first_name,
+        token,
+      });
   } catch (error) {
     return res.status(500).json({ message: "Error during login" });
   }

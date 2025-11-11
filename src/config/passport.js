@@ -1,58 +1,61 @@
 import passport from "passport";
-import local from "passport-local";
-import { UserSchemma } from "../models/user.model.js";
-import { createHash, getJWTCookie, isValidPassword } from "../utils.js";
-import jwt, { ExtractJwt, Strategy as jwtStrategy } from "passport-jwt";
+import { Strategy as LocalStrategy } from "passport-local";
+import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
+import userModel from "../models/userModel.js";
+import { createHash, isValidPassword } from "../utils/password.js";
 
-const localStrategy = local.Strategy;
+export const JWT_SECRET = process.env.JWT_SECRET ?? "coderhouseSecret";
 
-export const jwtPassport = () => {
-  passport.use(
-    "jwt",
-    new jwtStrategy(
-      {
-        jwtFromRequest: ExtractJwt.fromExtractors([getJWTCookie]),
-        secretOrKey: process.env.JWT_SECRET,
-      },
-      async (jwtPayload, done) => {
-        try {
-          return done(null, jwtPayload);
-        } catch (error) {
-          return done(error);
-        }
-      }
-    )
-  );
+const sanitizeUser = (userDoc) => {
+  const user = userDoc.toObject ? userDoc.toObject() : userDoc;
+  if (user.password) delete user.password;
+  return user;
 };
 
-//Registrar un usuario
-export const initPassport = () => {
+const buildJwtPayload = (user) => ({
+  userId: user._id.toString(),
+  role: user.role,
+  email: user.email,
+});
+
+const initializePassport = () => {
   passport.use(
     "register",
-    new localStrategy(
+    new LocalStrategy(
       {
-        usernameField: "email", // usamos el email como username
-        passReqToCallback: true, // permite que passport lea el body de la petición
+        usernameField: "email",
+        passReqToCallback: true,
+        session: false,
       },
-      async (req, username, password, done) => {
+      async (req, email, password, done) => {
         try {
-          const userFound = await UserSchemma.findOne({ email: username });
-          if (userFound) {
-            return done(null, false, { message: "User already exists" });
+          const existingUser = await userModel.findOne({ email });
+          if (existingUser) {
+            return done(null, false, { message: "El usuario ya existe" });
           }
 
-          const { first_name, last_name, age } = req.body;
+          const { first_name, last_name, age, cart = null, role = "user" } =
+            req.body;
 
-          const newUser = new UserSchemma({
+          if (!first_name || !last_name || !age || !password) {
+            return done(null, false, {
+              message: "Faltan campos obligatorios para registrar el usuario",
+            });
+          }
+
+          const hashedPassword = createHash(password);
+
+          const newUser = await userModel.create({
             first_name,
             last_name,
-            email: username,
+            email,
             age,
-            password: createHash(password),
+            password: hashedPassword,
+            cart,
+            role,
           });
 
-          await newUser.save();
-          return done(null, newUser);
+          return done(null, sanitizeUser(newUser));
         } catch (error) {
           return done(error);
         }
@@ -60,30 +63,55 @@ export const initPassport = () => {
     )
   );
 
-  /*   passport.use(
+  passport.use(
     "login",
-    new localStrategy(
-      { usernameField: "email", passReqToCallback: true },
-      async (req, username, password, done) => {
+    new LocalStrategy(
+      {
+        usernameField: "email",
+        session: false,
+      },
+      async (email, password, done) => {
         try {
-          const user = await UserSchemma.findOne({ email: username }).lean();
-          if (!user) return done(null, false);
-          if (!isValidPassword(user, password)) return done(null, false);
-          return done(null, user);
+          const user = await userModel.findOne({ email });
+          if (!user) {
+            return done(null, false, { message: "Credenciales inválidas" });
+          }
+
+          if (!isValidPassword(password, user.password)) {
+            return done(null, false, { message: "Credenciales inválidas" });
+          }
+
+          return done(null, sanitizeUser(user));
         } catch (error) {
-          done(error);
+          return done(error);
         }
       }
     )
-  ); */
-  //En JWT, la información del usuario se envía en el token mismo, que se firma digitalmente y se envía en cada solicitud.
-  //Passort: alamcenar en la session del servidor el id del usuario, se envia una cookie (La sesión se identifica mediante un ID de sesión único que se envía al cliente en una cookie.)
-  passport.serializeUser((user, done) => {
-    done(null, user._id); //No va a haber error / el id del usuario (cookie va a enviar solo id)
-  });
-  passport.deserializeUser(async (id, done) => {
-    //deserializar para recuperar parametros
-    const user = await UserSchemma.findById(id); //recuperamos el usuario por id
-    done(null, user);
-  });
+  );
+
+  passport.use(
+    "jwt",
+    new JwtStrategy(
+      {
+        jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+        secretOrKey: JWT_SECRET,
+      },
+      async (payload, done) => {
+        try {
+          const user = await userModel.findById(payload.userId);
+          if (!user) {
+            return done(null, false, { message: "Token inválido" });
+          }
+          return done(null, sanitizeUser(user));
+        } catch (error) {
+          return done(error, false);
+        }
+      }
+    )
+  );
 };
+
+export const createJwtPayload = buildJwtPayload;
+
+export default initializePassport;
+

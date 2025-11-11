@@ -1,39 +1,26 @@
 import express from "express";
+import mongoose from "mongoose";
 import passport from "passport";
-import dotenv from "dotenv";
-import { engine } from "express-handlebars";
-import path from "path";
-import { fileURLToPath } from "url";
-import { initPassport, jwtPassport } from "./config/passport.js";
-import router from "./routes/index.js";
-import { connectionDB } from './db/connection.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-dotenv.config();
+import userRouter from "./routes/userRouter.js";
+import sessionRouter from "./routes/sessionRouter.js";
+import initializePassport from "./config/passport.js";
 
 const app = express();
 
-// Configurar handlebars
-app.engine("handlebars", engine());
-app.set("view engine", "handlebars");
-app.set("views", path.join(__dirname, "views"));
+const uri = "mongodb://127.0.0.1:27017/class-zero";
+mongoose.connect(uri);
 
-// Middlewares
-app.use(express.json());
-app.use(passport.initialize());
-//app.use(passport.session());
+
+app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "public")));
 
-initPassport();
-jwtPassport();
-connectionDB();
+initializePassport();
+app.use(passport.initialize());
 
-app.use("/", router);
+app.use("/api/users", userRouter);
+app.use("/api/sessions", sessionRouter);
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+const PORT = 8080;
+app.listen(PORT, () => {
+  console.log(`Start Server in Port ${PORT}`);
 });

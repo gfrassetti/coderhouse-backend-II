@@ -1,10 +1,11 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
-import userModel from "../models/userModel.js";
+import { UserRepository } from "../repositories/userRepository.js";
 import { createHash, isValidPassword } from "../utils/password.js";
+import { config } from "./config.js";
 
-export const JWT_SECRET = process.env.JWT_SECRET ?? "coderhouseSecret";
+export const JWT_SECRET = config.jwt.secret;
 
 const sanitizeUser = (userDoc) => {
   const user = userDoc.toObject ? userDoc.toObject() : userDoc;
@@ -29,7 +30,7 @@ const initializePassport = () => {
       },
       async (req, email, password, done) => {
         try {
-          const existingUser = await userModel.findOne({ email });
+          const existingUser = await UserRepository.getByEmail(email);
           if (existingUser) {
             return done(null, false, { message: "El usuario ya existe" });
           }
@@ -43,14 +44,12 @@ const initializePassport = () => {
             });
           }
 
-          const hashedPassword = createHash(password);
-
-          const newUser = await userModel.create({
+          const newUser = await UserRepository.create({
             first_name,
             last_name,
             email,
             age,
-            password: hashedPassword,
+            password,
             cart,
             role,
           });
@@ -72,7 +71,7 @@ const initializePassport = () => {
       },
       async (email, password, done) => {
         try {
-          const user = await userModel.findOne({ email });
+          const user = await UserRepository.getByEmail(email);
           if (!user) {
             return done(null, false, { message: "Credenciales inválidas" });
           }
@@ -98,7 +97,7 @@ const initializePassport = () => {
       },
       async (payload, done) => {
         try {
-          const user = await userModel.findById(payload.userId);
+          const user = await UserRepository.getById(payload.userId);
           if (!user) {
             return done(null, false, { message: "Token inválido" });
           }

@@ -1,18 +1,18 @@
 import { Router } from "express";
-import userModel from "../models/userModel.js";
-import { createHash } from "../utils/password.js";
+import { UserRepository } from "../repositories/userRepository.js";
+import { UserDTO } from "../dtos/userDTO.js";
 
 const router = Router();
 
 // Consultar todos los usuarios
 router.get("/", async (req, res) => {
   try {
-    const result = await userModel.find().lean();
-    const users = result.map(({ password, ...rest }) => rest);
+    const users = await UserRepository.getAll();
+    const usersDTO = UserDTO.fromUsers(users);
 
     res.send({
       status: "success",
-      payload: users,
+      payload: usersDTO.map((u) => u.toJSON()),
     });
   } catch (error) {
     res.status(500).send({
@@ -41,7 +41,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const existing = await userModel.findOne({ email });
+    const existing = await UserRepository.getByEmail(email);
     if (existing) {
       return res.status(409).send({
         status: "error",
@@ -49,20 +49,20 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const hashedPassword = createHash(password);
-    const result = await userModel.create({
+    const user = await UserRepository.create({
       first_name,
       last_name,
       email,
       age,
-      password: hashedPassword,
+      password,
       role,
       cart,
     });
-    const { password: _, ...user } = result.toObject();
+
+    const userDTO = UserDTO.fromUser(user);
     res.status(201).send({
       status: "success",
-      payload: user,
+      payload: userDTO.toJSON(),
     });
   } catch (error) {
     res.status(400).send({
@@ -75,21 +75,19 @@ router.post("/", async (req, res) => {
 // Actualizar un usuario
 router.put("/:uid", async (req, res) => {
   const uid = req.params.uid;
-  const {
-    first_name,
-    last_name,
-    email,
-    age,
-    password,
-    role,
-    cart,
-  } = req.body;
-  try {
-    const user = await userModel.findById(uid);
-    if (!user) throw new Error("Usuario no encontrado");
+  const updateData = req.body;
 
-    if (email && email !== user.email) {
-      const emailTaken = await userModel.findOne({ email });
+  try {
+    const existingUser = await UserRepository.getById(uid);
+    if (!existingUser) {
+      return res.status(404).send({
+        status: "error",
+        message: "Usuario no encontrado",
+      });
+    }
+
+    if (updateData.email && updateData.email !== existingUser.email) {
+      const emailTaken = await UserRepository.getByEmail(updateData.email);
       if (emailTaken) {
         return res.status(409).send({
           status: "error",
@@ -98,28 +96,12 @@ router.put("/:uid", async (req, res) => {
       }
     }
 
-    const newUser = {
-      first_name: first_name ?? user.first_name,
-      last_name: last_name ?? user.last_name,
-      email: email ?? user.email,
-      age: age ?? user.age,
-      role: role ?? user.role,
-      cart: cart ?? user.cart,
-    };
-
-    if (password) {
-      newUser.password = createHash(password);
-    }
-
-    const updatedUser = await userModel
-      .findByIdAndUpdate(uid, newUser, { new: true })
-      .lean();
-
-    const { password: _, ...userWithoutPassword } = updatedUser;
+    const updatedUser = await UserRepository.update(uid, updateData);
+    const userDTO = UserDTO.fromUser(updatedUser);
 
     res.send({
       status: "success",
-      payload: userWithoutPassword,
+      payload: userDTO.toJSON(),
     });
   } catch (error) {
     res.status(400).send({
@@ -133,10 +115,18 @@ router.put("/:uid", async (req, res) => {
 router.delete("/:uid", async (req, res) => {
   const uid = req.params.uid;
   try {
-    const result = await userModel.deleteOne({ _id: uid });
+    const user = await UserRepository.getById(uid);
+    if (!user) {
+      return res.status(404).send({
+        status: "error",
+        message: "Usuario no encontrado",
+      });
+    }
+
+    await UserRepository.delete(uid);
     res.status(200).send({
       status: "success",
-      payload: result,
+      message: "Usuario eliminado exitosamente",
     });
   } catch (error) {
     res.status(400).send({
